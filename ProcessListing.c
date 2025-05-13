@@ -6,7 +6,7 @@ int main()
 {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
-        // Error handling
+     
         printf(GetLastError());
         return 1;
     }
