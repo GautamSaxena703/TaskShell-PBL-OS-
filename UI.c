@@ -1,9 +1,12 @@
+
+
 #include <windows.h>
 #include <commctrl.h>
 #include <psapi.h>
 #include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #pragma comment(lib, "comctl32.lib")
 
@@ -14,20 +17,63 @@ typedef struct {
     SIZE_T ramUsageBytes;
     ULONGLONG diskReadBytes;
     ULONGLONG diskWriteBytes;
-} ProcessUtilInfo;
+} GuiProcessUtilInfo;
 
 HWND hListView;
+int g_sortColumn = 0; // Default sort by Process Name
+BOOL g_sortAscending = TRUE; // Ascending order by default
+
+// Dynamic array for processes
+GuiProcessUtilInfo* g_procArray = NULL;
+size_t g_procCount = 0;
 
 void InitListViewColumns(HWND hwndListView);
-void InsertListViewItem(HWND hwndListView, int index, ProcessUtilInfo* pInfo);
+void InsertListViewItem(HWND hwndListView, int index, const GuiProcessUtilInfo* pInfo);
 void PopulateProcessData(HWND hwndListView);
-
+void ClearProcessData();
+int CompareProcesses(const void* a, const void* b);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
+
+int LaunchGUI() {
+    HINSTANCE hInst = GetModuleHandle(NULL);
+
+    INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_LISTVIEW_CLASSES };
+    InitCommonControlsEx(&icex);
+
+    const char CLASS_NAME[] = "ProcessUtilApp_Class";
+
+    WNDCLASS wc = { 0 };
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = CLASS_NAME;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    RegisterClass(&wc);
+
+    HWND hwnd = CreateWindowEx(
+        0, CLASS_NAME, "Process Utilization Monitoring",
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
+        NULL, NULL, hInst, NULL);
+
+    if (!hwnd) return 0;
+
+    ShowWindow(hwnd, SW_SHOWDEFAULT);
+    UpdateWindow(hwnd);
+
+    SetTimer(hwnd, 1, 500, NULL); 
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    return (int) msg.wParam;
+}
+
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLine, int nCmdShow) {
-    INITCOMMONCONTROLSEX icex;
-    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    icex.dwICC = ICC_LISTVIEW_CLASSES;
+    INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_LISTVIEW_CLASSES };
     InitCommonControlsEx(&icex);
 
     const char CLASS_NAME[] = "ProcessUtilApp_Class";
@@ -53,13 +99,15 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLine, int nCmd
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
-    SetTimer(hwnd, 1, 500, NULL);  // Set a timer to update every 0.5 seconds (500 ms)
+    SetTimer(hwnd, 1, 500, NULL);  // Update every 0.5 seconds
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    ClearProcessData();
 
     return (int) msg.wParam;
 }
@@ -72,7 +120,7 @@ void InitListViewColumns(HWND hwndListView) {
         "Process Name", "PID", "CPU Time (s)", "RAM (MB)", "Disk Read (MB)", "Disk Write (MB)", "Network"
     };
     int widths[] = { 220, 70, 100, 100, 120, 120, 80 };
-    int colCount = sizeof(columns) / sizeof(columns[0]);
+    int colCount = (int)(sizeof(columns) / sizeof(columns[0]));
 
     for (int i = 0; i < colCount; i++) {
         lvc.iSubItem = i;
@@ -82,14 +130,14 @@ void InitListViewColumns(HWND hwndListView) {
     }
 }
 
-void InsertListViewItem(HWND hwndListView, int index, ProcessUtilInfo* pInfo) {
+void InsertListViewItem(HWND hwndListView, int index, const GuiProcessUtilInfo* pInfo) {
     char buf[256];
 
     LVITEM lvi = {0};
     lvi.mask = LVIF_TEXT;
     lvi.iItem = index;
     lvi.iSubItem = 0;
-    lvi.pszText = pInfo->processName;
+    lvi.pszText = (LPSTR)pInfo->processName;
     ListView_InsertItem(hwndListView, &lvi);
 
     sprintf_s(buf, sizeof(buf), "%u", pInfo->pid);
@@ -98,21 +146,28 @@ void InsertListViewItem(HWND hwndListView, int index, ProcessUtilInfo* pInfo) {
     sprintf_s(buf, sizeof(buf), "%.2f", pInfo->cpuTimeSeconds);
     ListView_SetItemText(hwndListView, index, 2, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->ramUsageBytes / (1024.0*1024.0));
+    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->ramUsageBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 3, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskReadBytes / (1024.0*1024.0));
+    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskReadBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 4, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskWriteBytes / (1024.0*1024.0));
+    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskWriteBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 5, buf);
 
     ListView_SetItemText(hwndListView, index, 6, "N/A");
 }
 
-void PopulateProcessData(HWND hwndListView) {
-    ListView_DeleteAllItems(hwndListView);
+void ClearProcessData() {
+    if (g_procArray) {
+        free(g_procArray);
+        g_procArray = NULL;
+    }
+    g_procCount = 0;
+}
 
+void PopulateProcessData(HWND hwndListView) {
+    // Enumerate processes
     DWORD processes[1024], cbNeeded, count;
     if (!EnumProcesses(processes, sizeof(processes), &cbNeeded)) {
         MessageBox(hwndListView, "Failed to enumerate processes!", "Error", MB_OK | MB_ICONERROR);
@@ -120,7 +175,19 @@ void PopulateProcessData(HWND hwndListView) {
     }
     count = cbNeeded / sizeof(DWORD);
 
-    for (DWORD i = 0, idx = 0; i < count; i++) {
+    // Free old data
+    ClearProcessData();
+
+    // Allocate enough memory for process info array
+    g_procArray = (GuiProcessUtilInfo*)malloc(sizeof(GuiProcessUtilInfo) * count);
+    if (!g_procArray) {
+        MessageBox(hwndListView, "Memory allocation failed!", "Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    size_t actualCount = 0;
+
+    for (size_t i = 0; i < count; i++) {
         DWORD pid = processes[i];
         if (pid == 0) continue;
 
@@ -155,19 +222,78 @@ void PopulateProcessData(HWND hwndListView) {
             writeBytes = ioCounters.WriteTransferCount;
         }
 
-        ProcessUtilInfo info;
-        strncpy(info.processName, procName, MAX_PATH);
-        info.processName[MAX_PATH - 1] = '\0';
-        info.pid = pid;
-        info.cpuTimeSeconds = cpuSecs;
-        info.ramUsageBytes = ramBytes;
-        info.diskReadBytes = readBytes;
-        info.diskWriteBytes = writeBytes;
+        GuiProcessUtilInfo* pInfo = &g_procArray[actualCount];
+        strncpy(pInfo->processName, procName, MAX_PATH);
+        pInfo->processName[MAX_PATH - 1] = '\0';
+        pInfo->pid = pid;
+        pInfo->cpuTimeSeconds = cpuSecs;
+        pInfo->ramUsageBytes = ramBytes;
+        pInfo->diskReadBytes = readBytes;
+        pInfo->diskWriteBytes = writeBytes;
 
-        InsertListViewItem(hwndListView, idx++, &info);
+        actualCount++;
 
         CloseHandle(hProcess);
     }
+
+    g_procCount = actualCount;
+
+    // Sort the array
+    if (g_sortColumn >= 0 && g_sortColumn <= 6) {
+        qsort(g_procArray, g_procCount, sizeof(GuiProcessUtilInfo), CompareProcesses);
+    }
+
+    // Clear ListView items
+    ListView_DeleteAllItems(hwndListView);
+
+    // Insert sorted items
+    for (size_t i = 0; i < g_procCount; i++) {
+        InsertListViewItem(hwndListView, (int)i, &g_procArray[i]);
+    }
+}
+
+// Comparator for qsort
+int CompareProcesses(const void* a, const void* b) {
+    const GuiProcessUtilInfo* p1 = (const GuiProcessUtilInfo*)a;
+    const GuiProcessUtilInfo* p2 = (const GuiProcessUtilInfo*)b;
+    int result = 0;
+
+    switch (g_sortColumn) {
+        case 0: // Process Name
+            result = strcmp(p1->processName, p2->processName);
+            break;
+        case 1: // PID
+            if (p1->pid < p2->pid) result = -1;
+            else if (p1->pid > p2->pid) result = 1;
+            else result = 0;
+            break;
+        case 2: // CPU Time
+            if (p1->cpuTimeSeconds < p2->cpuTimeSeconds) result = -1;
+            else if (p1->cpuTimeSeconds > p2->cpuTimeSeconds) result = 1;
+            else result = 0;
+            break;
+        case 3: // RAM
+            if (p1->ramUsageBytes < p2->ramUsageBytes) result = -1;
+            else if (p1->ramUsageBytes > p2->ramUsageBytes) result = 1;
+            else result = 0;
+            break;
+        case 4: // Disk Read
+            if (p1->diskReadBytes < p2->diskReadBytes) result = -1;
+            else if (p1->diskReadBytes > p2->diskReadBytes) result = 1;
+            else result = 0;
+            break;
+        case 5: // Disk Write
+            if (p1->diskWriteBytes < p2->diskWriteBytes) result = -1;
+            else if (p1->diskWriteBytes > p2->diskWriteBytes) result = 1;
+            else result = 0;
+            break;
+        case 6: // Network - no data, keep equal
+        default:
+            result = 0;
+            break;
+    }
+
+    return g_sortAscending ? result : -result;
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -177,7 +303,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 WS_EX_CLIENTEDGE, WC_LISTVIEW, "",
                 WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | WS_VSCROLL | WS_HSCROLL,
                 10, 10, 860, 540,
-                hwnd, NULL, GetModuleHandle(NULL), NULL);
+                hwnd, (HMENU)1, GetModuleHandle(NULL), NULL);
             if (!hListView) {
                 MessageBox(hwnd, "Failed to create ListView", "Error", MB_OK | MB_ICONERROR);
                 return -1;
@@ -193,15 +319,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        case WM_TIMER: {
-            PopulateProcessData(hListView);  // Update the process data every 0.5 second
-            return 0;
+        case WM_NOTIFY: {
+            NMHDR* pnmh = (NMHDR*)lParam;
+            if (pnmh->hwndFrom == hListView && pnmh->code == LVN_COLUMNCLICK) {
+                NMLISTVIEW* pnmv = (NMLISTVIEW*)lParam;
+                int clickedColumn = pnmv->iSubItem;
+
+                if (g_sortColumn == clickedColumn) {
+                    g_sortAscending = !g_sortAscending;  // toggle
+                } else {
+                    g_sortColumn = clickedColumn;
+                    g_sortAscending = TRUE;
+                }
+
+                PopulateProcessData(hListView); // Refresh with sorting
+                return 0;
+            }
+            break;
         }
 
+        case WM_TIMER:
+            PopulateProcessData(hListView);
+            return 0;
+
         case WM_DESTROY:
-            KillTimer(hwnd, 1);  // Stop the timer when the window is destroyed
+            KillTimer(hwnd, 1);
+            ClearProcessData();
             PostQuitMessage(0);
             return 0;
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
+
