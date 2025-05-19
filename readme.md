@@ -26,7 +26,7 @@ This application displays real-time information about running processes on your 
 2. Compile the application using the following command:
 
    ```bash
-   gcc main.c ui.c helper.c -liphlpapi -lpsapi -lcomctl32 -o ProcessUtilApp.exe
+   gcc main.c UI.c helper.c -liphlpapi -lpsapi -lcomctl32 -lkernel32 -luser32 -lgdi32 -o ProcessUtilApp.exe
    ```
 
 3. Run the executable:
