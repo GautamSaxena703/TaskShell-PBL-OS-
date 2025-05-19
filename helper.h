@@ -12,6 +12,8 @@
 
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
+#define MAX_EXT 256
+
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "psapi.lib")
@@ -46,6 +48,10 @@ typedef struct {
     ULONGLONG diskWriteBytes;
 } ProcessUtilInfo;
 
+typedef struct {
+    TCHAR ext[16];
+    ULONGLONG size;
+} ExtStat;
 // Function declarations
 
 // CPU
@@ -70,6 +76,18 @@ void SearchRamProcessByName();
 // UTILIZATION
 void ProcessListing();
 void PrintAllProcessUtilization();
+
+//Disk Usage by Process
+BOOL GetProcessDiskUsage(DWORD processID, ULONGLONG* readBytes, ULONGLONG* writeBytes);
+void ShowAllProcessesDiskUsage();
+void ShowSpecificProcessDiskUsage(DWORD pid);
+
+//Disk Occupied by Folders as well as how much which extensions are occupying part of the folders
+ULONGLONG RoundToCluster(ULONGLONG size, DWORD clusterSize);
+DWORD GetClusterSize(const TCHAR *path);
+ULONGLONG GetFolderSizeRecursive(const TCHAR *folderPath, DWORD clusterSize);
+void analyzeFolderSizes(const TCHAR *basePath, DWORD clusterSize);
+void analyzeExtensionDistribution(const TCHAR *folderPath, DWORD clusterSize);
 
 // CLI Input Handler
 // void HandleUserInput(const char* input);

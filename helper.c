@@ -1,3 +1,6 @@
+#define WIN32_LEAN_AND_MEAN
+#define _WIN32_WINNT 0x0501 
+
 #include <windows.h>
 #include <psapi.h>
 #include <tchar.h>
@@ -8,7 +11,7 @@
 #include<tlhelp32.h>
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
-
+#define MAX_EXT 256
 
 
 #pragma comment(lib, "iphlpapi.lib")
@@ -44,6 +47,11 @@ typedef struct {
     ULONGLONG bytesSent;  
     ULONGLONG bytesRecv;
 } ProcessUtilInfo;
+
+typedef struct {
+    TCHAR ext[16];
+    ULONGLONG size;
+} ExtStat;
 
 //CPU
 void PrintCPUStatus();
@@ -458,8 +466,8 @@ void ProcessListing(){
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
      
-        printf(GetLastError());
-        return 1;
+        printf("Error: %lu\n", GetLastError());
+        return ;
     }
     PROCESSENTRY32 entry;
     entry.dwSize = sizeof(PROCESSENTRY32);
@@ -563,4 +571,197 @@ void PrintAllProcessUtilization() {
     }
     free(infos);
 }
+
+BOOL GetProcessDiskUsage(DWORD processID, ULONGLONG* readBytes, ULONGLONG* writeBytes) {
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processID);
+    if (hProcess == NULL) {
+        return FALSE;
+    }
+
+    IO_COUNTERS ioCounters;
+    BOOL result = GetProcessIoCounters(hProcess, &ioCounters);
+    if (result) {
+        *readBytes = ioCounters.ReadTransferCount;
+        *writeBytes = ioCounters.WriteTransferCount;
+    }
+
+    CloseHandle(hProcess);
+    return result;
+}
+
+void ShowAllProcessesDiskUsage() {
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        printf("Error: Unable to create process snapshot.\n");
+        return;
+    }
+
+    if (!Process32First(hSnapshot, &pe32)) {
+        CloseHandle(hSnapshot);
+        printf("Error: Unable to get first process.\n");
+        return;
+    }
+
+    printf("%-6s %-30s %-15s %-15s %-15s\n", "PID", "Process Name", "Read (KB)", "Write (KB)", "Total (KB)");
+    printf("-----------------------------------------------------------------------------------------\n");
+
+    do {
+        ULONGLONG readBytes = 0, writeBytes = 0;
+        if (GetProcessDiskUsage(pe32.th32ProcessID, &readBytes, &writeBytes)) {
+            printf("%-6lu %-30s %-15llu %-15llu %-15llu\n",
+                pe32.th32ProcessID,
+                pe32.szExeFile,
+                readBytes / 1024,
+                writeBytes / 1024,
+                (readBytes + writeBytes) / 1024
+            );
+        }
+    } while (Process32Next(hSnapshot, &pe32));
+
+    CloseHandle(hSnapshot);
+}
+
+//  Show specific process disk usage
+void ShowSpecificProcessDiskUsage(DWORD pid) {
+    ULONGLONG readBytes = 0, writeBytes = 0;
+    if (GetProcessDiskUsage(pid, &readBytes, &writeBytes)) {
+        printf("\nDisk Usage for PID %lu:\n", pid);
+        printf("Read Bytes  : %llu KB\n", readBytes / 1024);
+        printf("Write Bytes : %llu KB\n", writeBytes / 1024);
+        printf("Total       : %llu KB\n", (readBytes + writeBytes) / 1024);
+    } else {
+        printf("Unable to access process with PID %lu.\n", pid);
+    }
+}
+
+ULONGLONG RoundToCluster(ULONGLONG size, DWORD clusterSize) {
+    return ((size + clusterSize - 1) / clusterSize) * clusterSize;
+}
+
+//  Get Cluster Size
+DWORD GetClusterSize(const TCHAR *path) {
+    DWORD sectorsPerCluster, bytesPerSector, freeClusters, totalClusters;
+    if (GetDiskFreeSpace(path, &sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters)) {
+        return sectorsPerCluster * bytesPerSector;
+    }
+    return 4096; // default fallback
+}
+
+//  Recursive function to calculate folder size
+ULONGLONG GetFolderSizeRecursive(const TCHAR *folderPath, DWORD clusterSize) {
+    WIN32_FIND_DATA findData;
+    TCHAR searchPath[MAX_PATH];
+    wsprintf(searchPath, TEXT("%s\\*"), folderPath);
+
+    HANDLE hFind = FindFirstFile(searchPath, &findData);
+    if (hFind == INVALID_HANDLE_VALUE) return 0;
+
+    ULONGLONG totalSize = 0;
+
+    do {
+        if (_tcscmp(findData.cFileName, TEXT(".")) == 0 || _tcscmp(findData.cFileName, TEXT("..")) == 0)
+            continue;
+
+        TCHAR fullPath[MAX_PATH];
+        wsprintf(fullPath, TEXT("%s\\%s"), folderPath, findData.cFileName);
+
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            totalSize += GetFolderSizeRecursive(fullPath, clusterSize); // recursion
+        } else {
+            ULONGLONG size = (((ULONGLONG)findData.nFileSizeHigh) << 32) + findData.nFileSizeLow;
+            totalSize += RoundToCluster(size, clusterSize);
+        }
+
+    } while (FindNextFile(hFind, &findData));
+
+    FindClose(hFind);
+    return totalSize;
+}
+
+// Function 1: Show size of all subfolders
+void analyzeFolderSizes(const TCHAR *basePath, DWORD clusterSize) {
+    WIN32_FIND_DATA findData;
+    TCHAR searchPath[MAX_PATH];
+    wsprintf(searchPath, TEXT("%s\\*"), basePath);
+
+    HANDLE hFind = FindFirstFile(searchPath, &findData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        _tprintf(TEXT(" Error accessing folder.\n"));
+        return;
+    }
+
+    _tprintf(TEXT("\n Subfolder Size Breakdown for: %s\n"), basePath);
+    _tprintf(TEXT("------------------------------------------------------\n"));
+
+    do {
+        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            _tcscmp(findData.cFileName, TEXT(".")) != 0 &&
+            _tcscmp(findData.cFileName, TEXT("..")) != 0) {
+
+            TCHAR fullPath[MAX_PATH];
+            wsprintf(fullPath, TEXT("%s\\%s"), basePath, findData.cFileName);
+
+            ULONGLONG size = GetFolderSizeRecursive(fullPath, clusterSize);
+
+            _tprintf(TEXT("%-30s : %.2f MB\n"), findData.cFileName, (double)size / (1024 * 1024));
+        }
+    } while (FindNextFile(hFind, &findData));
+
+    FindClose(hFind);
+}
+
+// Function 2: Show file type distribution
+void analyzeExtensionDistribution(const TCHAR *folderPath, DWORD clusterSize) {
+    WIN32_FIND_DATA findData;
+    TCHAR searchPath[MAX_PATH];
+    wsprintf(searchPath, TEXT("%s\\*"), folderPath);
+
+    HANDLE hFind = FindFirstFile(searchPath, &findData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        _tprintf(TEXT("Error accessing folder.\n"));
+        return;
+    }
+
+    ExtStat stats[MAX_EXT];
+    int extCount = 0;
+    ULONGLONG totalSize = 0;
+
+    do {
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+
+        TCHAR *ext = _tcsrchr(findData.cFileName, '.');
+        if (!ext) ext = TEXT("[no_ext]");
+
+        ULONGLONG size = (((ULONGLONG)findData.nFileSizeHigh) << 32) + findData.nFileSizeLow;
+        size = RoundToCluster(size, clusterSize);
+        totalSize += size;
+
+        int found = 0;
+        for (int i = 0; i < extCount; i++) {
+            if (_tcscmp(stats[i].ext, ext) == 0) {
+                stats[i].size += size;
+                found = 1;
+                break;
+            }
+        }
+        if (!found && extCount < MAX_EXT) {
+            _tcscpy(stats[extCount].ext, ext);
+            stats[extCount].size = size;
+            extCount++;
+        }
+    } while (FindNextFile(hFind, &findData));
+
+    FindClose(hFind);
+
+    _tprintf(TEXT("\nFile Extension Distribution in: %s\n"), folderPath);
+    _tprintf(TEXT("------------------------------------------------------\n"));
+    for (int i = 0; i < extCount; i++) {
+        double percent = (double)stats[i].size * 100.0 / totalSize;
+        _tprintf(TEXT("%-10s : %.2f MB (%.2f%%)\n"), stats[i].ext, (double)stats[i].size / (1024 * 1024), percent);
+    }
+}
+
 

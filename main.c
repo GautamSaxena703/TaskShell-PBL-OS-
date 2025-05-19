@@ -37,17 +37,42 @@ void HandleUserInput(const char* input) {
         SearchNetworkProcessByName();
     } else if (strcmp(input, "list") == 0) {
         ProcessListing();
-    }else if (strcmp(input, "gui") == 0) {
+    } else if (strcmp(input, "gui") == 0) {
     LaunchGUI();
-} else {
-        printf("Invalid input. Try: cpuStatus, ramStatus, networkStatus, cpu, ram, network, utilization, search_cpu, search_ram, search_network, list, gui\n");
+    } else if(strcmp(input,"show_process_diskusage_all") == 0){
+        ShowAllProcessesDiskUsage();
+    } else if(strcmp(input,"show_process_diskusagebypid") == 0){
+        printf("\nEnter PID to analyze specific process: ");
+        DWORD pid;
+        scanf("%lu", &pid);
+
+        ShowSpecificProcessDiskUsage(pid);
+    }else if(strcmp(input,"analyze_folder_size") == 0){
+        TCHAR path[MAX_PATH];
+        _tprintf(TEXT(" Enter folder path: "));
+        _getts(path);
+
+        DWORD clusterSize = GetClusterSize(path);
+
+        analyzeFolderSizes(path, clusterSize);
+    } else if(strcmp(input,"analyze_extension_distribution") == 0){
+        TCHAR path[MAX_PATH];
+        _tprintf(TEXT(" Enter folder path: "));
+        _getts(path);
+
+        DWORD clusterSize = GetClusterSize(path);
+
+        analyzeExtensionDistribution(path, clusterSize);
+    }
+    else {
+        printf("Invalid input. Try: cpuStatus, ramStatus, networkStatus, cpu, ram, network, utilization, search_cpu, search_ram, search_network, list, gui, show_process_diskusage_all, show_process_diskusagebypid, analyze_folder_size, analyze_extension_distribution\n");
     }
 }
 
 
 int main() {
     char input[INPUT_SIZE];
-    printf("\nEnter a command (cpuStatus, ramStatus, networkStatus, cpu, ram, network, utilization, search_cpu, search_ram, search_network, list, hui, exit )\n ");
+    printf("\nEnter a command (cpuStatus, ramStatus, networkStatus, cpu, ram, network, utilization, search_cpu, search_ram, search_network, list, gui,  show_process_diskusage_all, show_process_diskusagebypid, analyze_folder_size, analyze_extension_distribution, exit )\n ");
     while (1) {
         printf("command : ");
         if (fgets(input, INPUT_SIZE, stdin)) {

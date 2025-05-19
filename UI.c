@@ -1,4 +1,5 @@
-
+#define WIN32_LEAN_AND_MEAN
+#define _WIN32_IE 0x0500
 
 #include <windows.h>
 #include <commctrl.h>
@@ -140,19 +141,19 @@ void InsertListViewItem(HWND hwndListView, int index, const GuiProcessUtilInfo* 
     lvi.pszText = (LPSTR)pInfo->processName;
     ListView_InsertItem(hwndListView, &lvi);
 
-    sprintf_s(buf, sizeof(buf), "%u", pInfo->pid);
+    snprintf(buf, sizeof(buf), "%u", pInfo->pid);
     ListView_SetItemText(hwndListView, index, 1, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->cpuTimeSeconds);
+    snprintf(buf, sizeof(buf), "%.2f", pInfo->cpuTimeSeconds);
     ListView_SetItemText(hwndListView, index, 2, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->ramUsageBytes / (1024.0 * 1024.0));
+    snprintf(buf, sizeof(buf), "%.2f", pInfo->ramUsageBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 3, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskReadBytes / (1024.0 * 1024.0));
+    snprintf(buf, sizeof(buf), "%.2f", pInfo->diskReadBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 4, buf);
 
-    sprintf_s(buf, sizeof(buf), "%.2f", pInfo->diskWriteBytes / (1024.0 * 1024.0));
+    snprintf(buf, sizeof(buf), "%.2f", pInfo->diskWriteBytes / (1024.0 * 1024.0));
     ListView_SetItemText(hwndListView, index, 5, buf);
 
     ListView_SetItemText(hwndListView, index, 6, "N/A");
