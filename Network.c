@@ -1,3 +1,4 @@
+//This requires AppNetworkCounter (Windows Utility) to run
 #include <windows.h>
 #include <iphlpapi.h>
 #include <psapi.h>
