@@ -13,7 +13,8 @@
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
 #define MAX_EXT 256
-
+#define CSV_PATH "appnet.csv"
+#define MAX_PROCNAME_LEN 24
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "psapi.lib")
@@ -61,10 +62,13 @@ void PrintAllProcessCPUUsage();
 void SearchCpuProcessByName();
 
 // NETWORK
-void PrintNetworkStatus();
-int GetProcessesNetworkUsage(ProcessNetworkInfo processes[]);
-void PrintAllProcessNetworkUsage();
-void SearchNetworkProcessByName();
+int system_network_usage();
+void trim_quotes(char* str);
+int parse_csv_line(char *line, char *fields[], int max_fields);
+int per_process_network();
+
+//create and kill process
+int create_process();
 
 // RAM
 void PrintMemoryStatus();

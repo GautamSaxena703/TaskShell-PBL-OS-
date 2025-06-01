@@ -25,16 +25,16 @@ void PrintHelp() {
     printf(BLUE "\nAvailable commands:\n" RESET);
     printf(YELLOW "  cpuStatus              " RESET "- Show overall CPU status\n");
     printf(YELLOW "  ramStatus              " RESET "- Show RAM usage status\n");
-    printf(YELLOW "  networkStatus          " RESET "- Show network status\n");
+    printf(YELLOW "  system_network_usage         " RESET "- Show system wide network usage\n");
     printf(YELLOW "  cpu                    " RESET "- CPU status + per-process usage\n");
     printf(YELLOW "  ram                    " RESET "- RAM status + per-process usage\n");
-    printf(YELLOW "  network                " RESET "- Network + per-process usage\n");
+    printf(YELLOW "  per_process_network                " RESET "-per-process usage\n");
     printf(YELLOW "  utilization            " RESET "- All process utilization\n");
     printf(YELLOW "  search_cpu             " RESET "- Search process CPU usage\n");
     printf(YELLOW "  search_ram             " RESET "- Search process RAM usage\n");
-    printf(YELLOW "  search_network         " RESET "- Search process network usage\n");
     printf(YELLOW "  list                   " RESET "- List running processes\n");
     printf(YELLOW "  gui                    " RESET "- Launch GUI interface\n");
+    printf(YELLOW "  create_process                   " RESET "- create a Process(e.g: notepad.exe)\n");
     printf(YELLOW "  show_process_diskusage_all   " RESET "- Show disk usage for all processes\n");
     printf(YELLOW "  show_process_diskusagebypid  " RESET "- Show disk usage by specific PID\n");
     printf(YELLOW "  analyze_folder_size    " RESET "- Analyze folder size\n");
@@ -48,8 +48,8 @@ void HandleUserInput(const char* input) {
     if (strcmp(input, "cpuStatus") == 0) {
         PrintCPUStatus();
 
-    } else if (strcmp(input, "networkStatus") == 0) {
-        PrintNetworkStatus();
+    } else if (strcmp(input, "system_network_usage") == 0) {
+        system_network_usage();
 
     } else if (strcmp(input, "ramStatus") == 0) {
         PrintMemoryStatus();
@@ -58,9 +58,8 @@ void HandleUserInput(const char* input) {
         PrintCPUStatus();
         PrintAllProcessCPUUsage();
 
-    } else if (strcmp(input, "network") == 0) {
-        PrintNetworkStatus();
-        PrintAllProcessNetworkUsage();
+    } else if (strcmp(input, "per_process_network") == 0) {
+        per_process_network();
 
     } else if (strcmp(input, "ram") == 0) {
         PrintMemoryStatus();
@@ -75,16 +74,17 @@ void HandleUserInput(const char* input) {
     } else if (strcmp(input, "search_ram") == 0) {
         SearchRamProcessByName();
 
-    } else if (strcmp(input, "search_network") == 0) {
-        SearchNetworkProcessByName();
-
     } else if (strcmp(input, "list") == 0) {
         ProcessListing();
 
     } else if (strcmp(input, "gui") == 0) {
         LaunchGUI();
 
-    } else if (strcmp(input, "show_process_diskusage_all") == 0) {
+    }  else if (strcmp(input, "create_process") == 0) {
+        create_process();
+
+    }
+    else if (strcmp(input, "show_process_diskusage_all") == 0) {
         ShowAllProcessesDiskUsage();
 
     } else if (strcmp(input, "show_process_diskusagebypid") == 0) {

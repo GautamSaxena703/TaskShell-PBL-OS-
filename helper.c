@@ -12,7 +12,8 @@
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
 #define MAX_EXT 256
-
+#define CSV_PATH "appnet.csv"
+#define MAX_PROCNAME_LEN 24
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "psapi.lib")
@@ -213,149 +214,6 @@ void SearchCpuProcessByName() {
 }
 
 
-
-void PrintNetworkStatus() {
-    MIB_IFTABLE* pIfTable1 = NULL, * pIfTable2 = NULL;
-    DWORD dwSize = 0, dwRetVal;
-
-    // First snapshot
-    GetIfTable(NULL, &dwSize, TRUE);
-    pIfTable1 = (MIB_IFTABLE*)malloc(dwSize);
-    if (!pIfTable1) {
-        printf("Memory allocation failed.\n");
-        return;
-    }
-
-    if ((dwRetVal = GetIfTable(pIfTable1, &dwSize, TRUE)) != NO_ERROR) {
-        printf("GetIfTable failed: %lu\n", dwRetVal);
-        free(pIfTable1);
-        return;
-    }
-
-    ULONGLONG sent1 = 0, recv1 = 0;
-    for (DWORD i = 0; i < pIfTable1->dwNumEntries; i++) {
-        sent1 += pIfTable1->table[i].dwOutOctets;
-        recv1 += pIfTable1->table[i].dwInOctets;
-    }
-
-    Sleep(1000); // Wait 1 second
-
-    // Second snapshot
-    GetIfTable(NULL, &dwSize, TRUE);
-    pIfTable2 = (MIB_IFTABLE*)malloc(dwSize);
-    if (!pIfTable2) {
-        printf("Memory allocation failed (second).\n");
-        free(pIfTable1);
-        return;
-    }
-
-    if ((dwRetVal = GetIfTable(pIfTable2, &dwSize, TRUE)) != NO_ERROR) {
-        printf("GetIfTable failed (second): %lu\n", dwRetVal);
-        free(pIfTable1);
-        free(pIfTable2);
-        return;
-    }
-
-    ULONGLONG sent2 = 0, recv2 = 0;
-    for (DWORD i = 0; i < pIfTable2->dwNumEntries; i++) {
-        sent2 += pIfTable2->table[i].dwOutOctets;
-        recv2 += pIfTable2->table[i].dwInOctets;
-    }
-
-    free(pIfTable1);
-    free(pIfTable2);
-
-    double mbps = ((double)((sent2 - sent1) + (recv2 - recv1)) * 8) / 1000000.0;
-    printf("Network Utilization: Sent+Received = %.2f Mbps\n", mbps);
-}
-
-int GetProcessesNetworkUsage(ProcessNetworkInfo processes[]) {
-    DWORD processIDs[1024], cbNeeded;
-    unsigned int count = 0;
-
-    if (!EnumProcesses(processIDs, sizeof(processIDs), &cbNeeded)) {
-        printf("EnumProcesses failed.\n");
-        return 0;
-    }
-
-    DWORD numProcs = cbNeeded / sizeof(DWORD);
-    for (DWORD i = 0; i < numProcs; i++) {
-        DWORD pid = processIDs[i];
-        if (pid == 0) continue;
-
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-        if (hProcess) {
-            HMODULE hMod;
-            DWORD cbMod;
-            char name[MAX_PATH] = "<unknown>";
-            if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbMod)) {
-                GetModuleBaseNameA(hProcess, hMod, name, sizeof(name));
-            }
-
-            strncpy(processes[count].processName, name, MAX_PATH);
-            processes[count].pid = pid;
-            processes[count].bytesSent = 0; // Needs external driver to track
-            processes[count].bytesRecv = 0;
-
-            CloseHandle(hProcess);
-            count++;
-        }
-    }
-
-    return count;
-}
-
-void PrintAllProcessNetworkUsage() {
-    ProcessNetworkInfo processes[1024];
-    int count = GetProcessesNetworkUsage(processes);
-
-    if (count == 0) return;
-
-    printf("\n--- Process Network Usage (Bytes sent and received - demo only) ---\n");
-    printf("%-30s  %-6s  %-15s  %-15s\n", "Process Name", "PID", "Bytes Sent", "Bytes Received");
-    printf("-------------------------------------------------------------------------------\n");
-
-    for (int i = 0; i < count; i++) {
-        printf("%-30s  %-6u  %-15llu  %-15llu\n",
-            processes[i].processName,
-            processes[i].pid,
-            processes[i].bytesSent,
-            processes[i].bytesRecv);
-    }
-}
-
-void SearchNetworkProcessByName() {
-    ProcessNetworkInfo processes[1024];
-    int count = GetProcessesNetworkUsage(processes);
-    if (count == 0) return;
-
-    char search[MAX_PATH];
-    printf("Enter process name to search: ");
-    scanf("%s", search);
-
-    ULONGLONG totalSent = 0, totalRecv = 0;
-    int found = 0;
-
-    for (int i = 0; i < count; i++) {
-        if (strstr(processes[i].processName, search)) {
-            totalSent += processes[i].bytesSent;
-            totalRecv += processes[i].bytesRecv;
-            found = 1;
-        }
-    }
-
-    if (found) {
-        printf("Total usage for processes matching '%s':\n", search);
-        printf("  Bytes Sent: %llu\n", totalSent);
-        printf("  Bytes Received: %llu\n", totalRecv);
-    } else {
-        printf("No processes found matching '%s'.\n", search);
-    }
-}
-
-
-
-
 void PrintMemoryStatus() {
     MEMORYSTATUSEX memInfo;
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
@@ -460,6 +318,141 @@ void SearchRamProcessByName() {
     }
 }
 
+int system_network_usage(){
+    DWORD dwSize = 0;
+    DWORD dwRetVal = 0;
+
+    // Get the size of the table
+    GetIfTable(NULL, &dwSize, FALSE);
+    MIB_IFTABLE *pIfTable = (MIB_IFTABLE *) malloc(dwSize);
+    if (pIfTable == NULL) {
+        printf("Error allocating memory\n");
+        return 1;
+    }
+
+    // Retrieve the actual data
+    dwRetVal = GetIfTable(pIfTable, &dwSize, FALSE);
+    if (dwRetVal != NO_ERROR) {
+        printf("GetIfTable failed with error: %lu\n", dwRetVal);
+        free(pIfTable);
+        return 1;
+    }
+
+    printf("Number of interfaces: %lu\n", pIfTable->dwNumEntries);
+
+    ULONG totalIn = 0;
+    ULONG totalOut = 0;
+
+    for (DWORD i = 0; i < pIfTable->dwNumEntries; i++) {
+         MIB_IFROW row = pIfTable->table[i];
+    wprintf(L"Interface %lu: %ls\n", i, row.wszName);
+    printf("  Description: %.*s\n", row.dwDescrLen, row.bDescr);
+    printf("  InOctets: %lu\n", row.dwInOctets);
+    printf("  OutOctets: %lu\n", row.dwOutOctets);
+
+        totalIn += row.dwInOctets;
+        totalOut += row.dwOutOctets;
+    }
+
+    printf("\nTotal Bytes Received (In): %lu\n", totalIn);
+    printf("Total Bytes Sent (Out): %lu\n", totalOut);
+
+    free(pIfTable);
+    return 0;
+}
+
+void trim_quotes(char* str) {
+    size_t len = strlen(str);
+    if (len > 1 && str[0] == '"' && str[len-1] == '"') {
+        memmove(str, str+1, len-2);
+        str[len-2] = '\0';
+    }
+}
+
+int parse_csv_line(char *line, char *fields[], int max_fields) {
+    int count = 0;
+    char *ptr = line;
+    while (*ptr && count < max_fields) {
+        while (*ptr == ' ' || *ptr == '\t') ptr++;
+        if (*ptr == '"') {
+            ptr++;
+            fields[count++] = ptr;
+            while (*ptr && !(*ptr == '"' && (*(ptr+1) == ',' || *(ptr+1) == '\n' || *(ptr+1) == '\0'))) ptr++;
+            if (*ptr == '"') {
+                *ptr = '\0';
+                ptr++;
+            }
+            if (*ptr == ',') ptr++;
+        } else {
+            fields[count++] = ptr;
+            while (*ptr && *ptr != ',' && *ptr != '\n') ptr++;
+            if (*ptr == ',' || *ptr == '\n') {
+                *ptr = '\0';
+                ptr++;
+            }
+        }
+    }
+    return count;
+}
+
+int per_process_network(){
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+        "AppNetworkCounter.exe /CaptureTime 15000 /scomma %s", CSV_PATH);
+
+    printf("Collecting network usage data (15 seconds)...\n");
+    int ret = system(cmd);
+    if (ret != 0) {
+        printf("Failed to run AppNetworkCounter.exe.\n");
+        return 1;
+    }
+
+    // 2. Open CSV
+    FILE* fp = fopen(CSV_PATH, "r");
+    if (!fp) {
+        printf("Failed to open %s\n", CSV_PATH);
+        return 1;
+    }
+
+    char line[1024];
+    if (!fgets(line, sizeof(line), fp)) {
+        printf("CSV file is empty or invalid.\n");
+        fclose(fp);
+        return 1;
+    }
+
+    // Print header
+    printf("%-24s %15s %15s %15s %15s\n", "Process Name", "Recv Bytes", "Sent Bytes", "Recv Packets", "Sent Packets");
+    printf("---------------------------------------------------------------------------------------------------\n");
+
+    while (fgets(line, sizeof(line), fp)) {
+        char *fields[10] = {0};
+        int field_count = parse_csv_line(line, fields, 10);
+        if (field_count < 8) continue;
+
+        char procname[MAX_PROCNAME_LEN];
+        trim_quotes(fields[0]); // Process Name
+        strncpy(procname, fields[0], MAX_PROCNAME_LEN-1);
+        procname[MAX_PROCNAME_LEN-1] = '\0';
+        trim_quotes(fields[2]); // Bytes Received
+        trim_quotes(fields[3]); // Bytes Sent
+        trim_quotes(fields[6]); // Packets Received
+        trim_quotes(fields[7]); // Packets Sent
+
+        printf("%-24s %15s %15s %15s %15s\n",
+            procname,
+            fields[2][0] ? fields[2] : "0",
+            fields[3][0] ? fields[3] : "0",
+            fields[6][0] ? fields[6] : "0",
+            fields[7][0] ? fields[7] : "0");
+    }
+
+    fclose(fp);
+    remove(CSV_PATH);
+
+    printf("\nDone.\n");
+    return 0;
+}
 
 void ProcessListing(){
     
@@ -763,5 +756,27 @@ void analyzeExtensionDistribution(const TCHAR *folderPath, DWORD clusterSize) {
         _tprintf(TEXT("%-10s : %.2f MB (%.2f%%)\n"), stats[i].ext, (double)stats[i].size / (1024 * 1024), percent);
     }
 }
+
+int create_process(){
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    char command[100];
+
+    printf("Enter process to launch (e.g., notepad.exe): ");
+    fgets(command, sizeof(command), stdin);
+    command[strcspn(command, "\n")] = 0;
+
+    if (CreateProcess(NULL, command, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        printf("Started %s with PID: %lu\n", command, pi.dwProcessId);
+
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    } else {
+        printf("CreateProcess failed (%lu)\n", GetLastError());
+    }
+
+    return 0;
+}
+
 
 
