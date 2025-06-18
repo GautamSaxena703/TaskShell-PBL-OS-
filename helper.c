@@ -9,6 +9,7 @@
 #include <string.h>
 #include <iphlpapi.h>
 #include<tlhelp32.h>
+#include<time.h>
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
 #define MAX_EXT 256
@@ -775,6 +776,93 @@ int create_process(){
         printf("CreateProcess failed (%lu)\n", GetLastError());
     }
 
+    return 0;
+}
+
+void cmd_time() {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+        printf("Current time: %02d:%02d:%02d\n", t->tm_hour, t->tm_min, t->tm_sec);
+    } else {
+        printf("Unable to get current time.\n");
+    }
+}
+
+void cmd_date() {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+        printf("Current date: %04d-%02d-%02d\n", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
+    } else {
+        printf("Unable to get current date.\n");
+    }
+}
+
+void cmd_whoami() {
+    char username[256];
+    DWORD size = sizeof(username);
+    if (GetUserNameA(username, &size)) {
+        printf("Current user: %s\n", username);
+    } else {
+        printf("Unable to get current user.\n");
+    }
+}
+
+// Prints the computer name
+void cmd_hostname() {
+    char hostname[256];
+    DWORD size = sizeof(hostname);
+    if (GetComputerNameA(hostname, &size)) {
+        printf("Computer name: %s\n", hostname);
+    } else {
+        printf("Unable to get computer name.\n");
+    }
+}
+
+// Prints all environment variables
+void cmd_env() {
+    LPCH env = GetEnvironmentStringsA();
+    if (env == NULL) {
+        printf("Unable to get environment variables.\n");
+        return;
+    }
+    LPCH var = env;
+    while (*var) {
+        printf("%s\n", var);
+        var += strlen(var) + 1;
+    }
+    FreeEnvironmentStringsA(env);
+}
+
+// Example command dispatcher
+void run_command(const char *cmd) {
+    if (strcmp(cmd, "time") == 0) {
+        cmd_time();
+    } else if (strcmp(cmd, "date") == 0) {
+        cmd_date();
+    } else if (strcmp(cmd, "whoami") == 0) {
+        cmd_whoami();
+    } else if (strcmp(cmd, "hostname") == 0) {
+        cmd_hostname();
+    } else if (strcmp(cmd, "env") == 0) {
+        cmd_env();
+    } else {
+        printf("Unknown command: %s\n", cmd);
+    }
+}
+
+int system_commands(){
+    char input[64];
+    printf("Enter a system info command (time, date, whoami, hostname, env):\n");
+    while (1) {
+        printf("> ");
+        if (!fgets(input, sizeof(input), stdin)) break;
+        // Remove trailing newline
+        input[strcspn(input, "\r\n")] = 0;
+        if (strcmp(input, "exit") == 0) break;
+        run_command(input);
+    }
     return 0;
 }
 

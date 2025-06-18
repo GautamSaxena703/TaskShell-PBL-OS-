@@ -9,6 +9,7 @@
 #include <string.h>
 #include <iphlpapi.h>
 #include <tlhelp32.h>
+#include <time.h>
 
 #define MAX_PROCESSES 1024
 #define INPUT_SIZE 100
@@ -93,6 +94,14 @@ ULONGLONG GetFolderSizeRecursive(const TCHAR *folderPath, DWORD clusterSize);
 void analyzeFolderSizes(const TCHAR *basePath, DWORD clusterSize);
 void analyzeExtensionDistribution(const TCHAR *folderPath, DWORD clusterSize);
 
+//System commmands
+void cmd_time();
+void cmd_date();
+void cmd_whoami();
+void cmd_hostname();
+void cmd_env();
+void run_command(const char *cmd);
+int system_commands();
 // CLI Input Handler
 // void HandleUserInput(const char* input);
 

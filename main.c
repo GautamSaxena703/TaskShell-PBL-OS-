@@ -38,6 +38,7 @@ void PrintHelp() {
     printf(YELLOW "  show_process_diskusage_all   " RESET "- Show disk usage for all processes\n");
     printf(YELLOW "  show_process_diskusagebypid  " RESET "- Show disk usage by specific PID\n");
     printf(YELLOW "  analyze_folder_size    " RESET "- Analyze folder size\n");
+    printf(YELLOW "  system_commands            " RESET "- All system commands\n");
     printf(YELLOW "  analyze_extension_distribution" RESET "- Extension distribution in folder\n");
     printf(YELLOW "  exit                   " RESET "- Exit the tool\n\n");
 }
@@ -82,6 +83,9 @@ void HandleUserInput(const char* input) {
 
     }  else if (strcmp(input, "create_process") == 0) {
         create_process();
+
+    }else if (strcmp(input, "system_commands") == 0) {
+        system_commands();
 
     }
     else if (strcmp(input, "show_process_diskusage_all") == 0) {
