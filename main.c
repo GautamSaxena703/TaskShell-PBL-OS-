@@ -40,12 +40,36 @@ void PrintHelp() {
     printf(YELLOW "  analyze_folder_size    " RESET "- Analyze folder size\n");
     printf(YELLOW "  system_commands            " RESET "- All system commands\n");
     printf(YELLOW "  analyze_extension_distribution" RESET "- Extension distribution in folder\n");
+    printf(YELLOW "  plot_cpu" RESET "- Visualizing CPU usage\n");
+    printf(YELLOW "  plot_ram" RESET "- Visualizing RAM usage\n");
+    printf(YELLOW "  plot_network" RESET "- Visualizing Network usage\n");
     printf(YELLOW "  exit                   " RESET "- Exit the tool\n\n");
+}
+
+void VisualizeCPU() {
+    system("python visualize_cpu.py");  // Step 2: visualize it
+}
+
+void VisualizeRAM() {
+    system("python plot_ram.py");  // Step 2: visualize it
+}
+
+void VisualizeNetwork() {
+    system("python plot_network.py");  // Step 2: visualize it
 }
 
 void HandleUserInput(const char* input) {
     printf(CYAN "\n[+] Executing: %s\n" RESET, input);
 
+    if (strcmp(input, "plot_cpu") == 0) {
+    VisualizeCPU();
+    }
+    else if(strcmp(input,"plot_ram") == 0){
+        VisualizeRAM();
+    }
+    else if(strcmp(input,"plot_network") == 0){
+        VisualizeNetwork();
+    }
     if (strcmp(input, "cpuStatus") == 0) {
         PrintCPUStatus();
 
